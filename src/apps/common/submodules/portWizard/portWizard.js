@@ -30,7 +30,13 @@ define(function(require) {
 					mimeTypes: [
 						'application/pdf'
 					],
-					maxSize: 8
+					maxSize: 5
+				},
+				csvFiles: {
+					mimeTypes: [
+						'text/csv'
+					],
+					maxSize: 5
 				},
 				knownErrors: {
 					billUpload: {
@@ -338,15 +344,16 @@ define(function(require) {
 			var self = this,
 				$template = args.template,
 				$numbersArea = $template.find('#numbers_to_port_numbers'),
-				$fileInput = $template.find('#numbers_to_port_file'),
-				$fileNameInput = $template.find('#numbers_to_port_filename');
+				$fileNameInput = $template.find('#numbers_to_port_filename'),
+				portWizardI18n = self.i18n.active().commonApp.portWizard,
+				csvFilesRestrictions = self.appFlags.portWizard.csvFiles;
 
-			// Display the open file dialog when clicking any part of the file selector container.
-			// The click event handler was set to the container instead of the input and the button
-			// individually because the input is disabled, so the click event there is ignored.
 			$template
-				.find('.file-selector')
+				.find('#numbers_to_port_file')
 					.on('click', function(e) {
+						// Display the open file dialog when clicking any part of the file selector container.
+						// The click event handler was set to the container instead of the input and the button
+						// individually because the input is disabled, so the click event there is ignored.
 						// Check if the event has not been triggered programmatically,
 						// to prevent recursion
 						if (_.isUndefined(e.originalEvent)) {
@@ -356,38 +363,56 @@ define(function(require) {
 						e.preventDefault();
 
 						$fileInput.trigger('click');
+					})
+					.fileUpload({
+						wrapperClass: 'file-selector',
+						inputOnly: true,
+						inputPlaceholder: portWizardI18n.steps.general.placeholders.file,
+						btnClass: 'monster-button',
+						btnText: portWizardI18n.steps.general.labels.fileButton,
+						mimeTypes: csvFilesRestrictions.mimeTypes,
+						maxSize: csvFilesRestrictions.maxSize,
+						success: function(results) {
+							console.log('results', arguments);
+							self.portWizardNameAndNumbersProcessFile({
+								file: results[0].file,
+								fileNameInput: $fileNameInput,
+								numbersArea: $numbersArea
+							});
+						},
+						error: function(errorsList) {
+							console.log('Error', arguments);
+							var message;
+							if (_.get(errorsList, 'mimeType.length') > 0) {
+								message = portWizardI18n.steps.nameAndNumbers.numbersToPort.errors.file.mimeType;
+							} else if (_.get(errorsList, 'mimeType.length') > 0) {
+								message = self.getTemplate({
+									name: '!' + portWizardI18n.steps.nameAndNumbers.numbersToPort.errors.file,
+									data: {
+										maxFileSize: csvFilesRestrictions.maxSize
+									}
+								});
+							} else {
+								message = portWizardI18n.steps.nameAndNumbers.numbersToPort.errors.file.unknownError;
+							}
+
+							monster.ui.toast({
+								type: 'error',
+								message: message
+							});
+						}
 					});
-
-			$fileInput.on('change', function(e) {
-				var file = e.target.files[0];
-
-				self.portWizardNameAndNumbersProcessFile({
-					file: file,
-					fileNameInput: $fileNameInput,
-					numbersArea: $numbersArea
-				});
-			});
 		},
 
 		/**
 		 * Process the uploaded numbers CSV file
 		 * @param  {Object} args
-		 * @param  {Object} args.file  File data
-		 * @param  {jQuery} args.fileNameInput  Text input that is used to display the uploaded file name
+		 * @param  {Object} args.fileText  File text data
 		 * @param  {jQuery} args.numbersArea  Text Area that contains the port request's phone numbers
 		 */
 		portWizardNameAndNumbersProcessFile: function(args) {
 			var self = this,
-				file = args.file,
-				$fileNameInput = args.fileNameInput,
 				$numbersArea = args.numbersArea,
-				isValid = file.name.match('.+(.csv)$'),
-				invalidMessageTemplate = self.getTemplate({
-					name: '!' + self.i18n.active().commonApp.portWizard.steps.nameAndNumbers.numbersToPort.errors.file,
-					data: {
-						type: file.type
-					}
-				}),
 				callbacks = {
 					success: function(results) {
 						monster.parallel([
@@ -420,39 +445,28 @@ define(function(require) {
 				},
 				parseFileArgs = _
 					.chain(args)
-					.pick('file', 'numbersArea')
+					.pick('fileText', 'numbersArea')
 					.merge(callbacks)
 					.value();
 
-			if (!isValid) {
-				monster.ui.toast({
-					type: 'error',
-					message: invalidMessageTemplate
-				});
-
-				return;
-			}
-
 			self.portWizardNameAndNumbersParseFile(parseFileArgs);
-
-			$fileNameInput.val(file.name);
 		},
 
 		/**
 		 * Parses the uploaded CSV file to extract the phone numbers
 		 * @param  {Object} args
-		 * @param  {Object} args.file  File data
+		 * @param  {String} args.text  File text
 		 * @param  {Function} args.successs  Callback function to be executed once the parsing and
 		 *                                   number extraction has been completed successfully
 		 * @param  {Function} args.error  Callback function to be executed if the file parsing fails
 		 */
 		portWizardNameAndNumbersParseFile: function(args) {
 			var self = this,
-				file = args.file;
+				text = args.text;
 
 			monster.waterfall([
 				function(waterfallCallback) {
-					Papa.parse(file, {
+					Papa.parse(text, {
 						header: false,
 						skipEmptyLines: true,
 						complete: function(results) {
@@ -1006,12 +1020,31 @@ define(function(require) {
 		 * @param  {Function} callback  Callback to pass the step template to be rendered
 		 */
 		portWizardOwnershipConfirmationRender: function(args, callback) {
-			var self = this;
+			var self = this,
+				ownershipConfirmationData = _.get(args.data, 'ownershipConfirmation', {}),
+				initTemplate = function() {
+					var $template = $(self.getTemplate({
+						name: 'step-ownershipConfirmation',
+						data: {
+							data: ownershipConfirmationData
+						},
+						submodule: 'portWizard'
+					}));
 
-			// TODO: Not implemented
+					$template
+						.find('#bill_upload_recent_bill')
+							.fileUpload({
+								inputOnly: true,
+								wrapperClass: 'file-selector',
+								btnClass: 'monster-button',
+								//btnText: self.i18n.active().portWizard.fileUpload.button,
+							});
+
+					return $template;
+				};
 
 			callback({
-				template: $(''),
+				template: initTemplate(),
 				callback: self.portWizardScrollToTop
 			});
 		},

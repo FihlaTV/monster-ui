@@ -33,7 +33,10 @@
 						},
 						"errors": {
 							"numbers": "One or more numbers are invalid",
-							"file": "Invalid file type. Only CSV files are accepted, but {{type}} was received."
+							"file": {
+								"mimeType": "Invalid file type. Only CSV files are accepted.",
+								"unknownError": "An error occurred while reading the CSV file."
+							}
 						},
 						"messages": {
 							"file": {
@@ -146,7 +149,14 @@
 					},
 					"errors": {
 						"phonebookUnavailable": "It was not possible to lookup the number information. Check if the Phonebook feature is available for your installation.",
-						"lookupNumbersError": "An error occurred while trying to lookup for phone numbers information."
+						"lookupNumbersError": "An error occurred while trying to lookup for phone numbers information.",
+						"maxFileSize": "Your file exceeds the allowed max file size ({{maxFileSize}}Mb)"
+					},
+					"labels": {
+						"fileButton": "Choose File"
+					},
+					"placeholders": {
+						"file": "No file selected..."
 					}
 				}
 			}
